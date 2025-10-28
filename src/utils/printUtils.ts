@@ -46,6 +46,37 @@ export class PrintUtils {
 
   // Print receipt with enhanced formatting and mobile support
   static async printReceipt(transaction: any) {
+    // Check if Bluetooth printing is enabled
+    const enableBluetoothPrinting = localStorage.getItem('enableBluetoothPrinting') === 'true';
+    const autoPrintReceipts = localStorage.getItem('autoPrintReceipts') !== 'false'; // default to true
+    
+    if (enableBluetoothPrinting && autoPrintReceipts) {
+      try {
+        // Try to print via Bluetooth printer
+        const { BluetoothPrinter } = await import('@/utils/bluetoothPrinter');
+        
+        if (BluetoothPrinter.isConnected()) {
+          // Get business info from localStorage
+          const businessInfo = {
+            name: localStorage.getItem('businessName') || 'POS BUSINESS',
+            address: localStorage.getItem('businessAddress') || '123 Business St, City, Country',
+            phone: localStorage.getItem('businessPhone') || 'Phone: (123) 456-7890'
+          };
+          
+          const success = await BluetoothPrinter.printReceipt(transaction, businessInfo);
+          if (success) {
+            console.log('Receipt printed successfully via Bluetooth printer');
+            return;
+          } else {
+            console.error('Failed to print receipt via Bluetooth printer');
+          }
+        }
+      } catch (error) {
+        console.error('Error with Bluetooth printing:', error);
+        // Fall back to browser printing if Bluetooth fails
+      }
+    }
+    
     // Show loading indicator
     this.showLoadingIndicator('Preparing print...');
     
@@ -363,6 +394,37 @@ export class PrintUtils {
 
   // Print purchase receipt for a single transaction
   static async printPurchaseReceipt(transaction: any) {
+    // Check if Bluetooth printing is enabled
+    const enableBluetoothPrinting = localStorage.getItem('enableBluetoothPrinting') === 'true';
+    const autoPrintReceipts = localStorage.getItem('autoPrintReceipts') !== 'false'; // default to true
+    
+    if (enableBluetoothPrinting && autoPrintReceipts) {
+      try {
+        // Try to print via Bluetooth printer
+        const { BluetoothPrinter } = await import('@/utils/bluetoothPrinter');
+        
+        if (BluetoothPrinter.isConnected()) {
+          // Get business info from localStorage
+          const businessInfo = {
+            name: localStorage.getItem('businessName') || 'POS BUSINESS',
+            address: localStorage.getItem('businessAddress') || '123 Business St, City, Country',
+            phone: localStorage.getItem('businessPhone') || 'Phone: (123) 456-7890'
+          };
+          
+          const success = await BluetoothPrinter.printPurchaseReceipt(transaction, businessInfo);
+          if (success) {
+            console.log('Purchase receipt printed successfully via Bluetooth printer');
+            return;
+          } else {
+            console.error('Failed to print purchase receipt via Bluetooth printer');
+          }
+        }
+      } catch (error) {
+        console.error('Error with Bluetooth printing:', error);
+        // Fall back to browser printing if Bluetooth fails
+      }
+    }
+    
     // Show loading indicator
     this.showLoadingIndicator('Preparing print...');
     

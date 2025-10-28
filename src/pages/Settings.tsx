@@ -37,6 +37,16 @@ export const Settings = ({ username, onBack, onLogout }: SettingsProps) => {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewType, setPreviewType] = useState<"sales" | "purchase">("sales");
   
+  // Bluetooth printer state
+  const [isBluetoothSupported, setIsBluetoothSupported] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isPrinterConnected, setIsPrinterConnected] = useState(false);
+  const [printerStatus, setPrinterStatus] = useState<string | null>(null);
+  const [enableBluetoothPrinting, setEnableBluetoothPrinting] = useState(false);
+  const [autoPrintReceipts, setAutoPrintReceipts] = useState(true);
+  const [printerPaperWidth, setPrinterPaperWidth] = useState("80mm");
+  const [printDensity, setPrintDensity] = useState("medium");
+  
   // General settings
   const [businessName, setBusinessName] = useState("My Business");
   const [businessAddress, setBusinessAddress] = useState("123 Main St, City, Country");
@@ -92,6 +102,9 @@ export const Settings = ({ username, onBack, onLogout }: SettingsProps) => {
   // Load settings from localStorage on component mount
   useEffect(() => {
     const loadSettings = () => {
+      // Check if Bluetooth is supported
+      setIsBluetoothSupported('bluetooth' in navigator);
+      
       // Load general settings
       const savedBusinessName = localStorage.getItem('businessName');
       if (savedBusinessName) setBusinessName(savedBusinessName);
@@ -210,15 +223,81 @@ export const Settings = ({ username, onBack, onLogout }: SettingsProps) => {
       const savedDarkMode = localStorage.getItem('darkMode');
       if (savedDarkMode) setDarkMode(savedDarkMode === 'true');
       
-      const savedLanguage = localStorage.getItem('language');
-      if (savedLanguage) setLanguage(savedLanguage);
-      
       const savedDisplayFontSize = localStorage.getItem('displayFontSize');
-      if (savedDisplayFontSize) setDisplayFontSize(savedDisplayFontSize);
+      if (savedDisplayFontSize) setDisplayFontSize(savedDisplayFontSize as "small" | "medium" | "large");
+      
+      // Load printer settings
+      const savedEnableBluetoothPrinting = localStorage.getItem('enableBluetoothPrinting');
+      if (savedEnableBluetoothPrinting) setEnableBluetoothPrinting(savedEnableBluetoothPrinting === 'true');
+      
+      const savedAutoPrintReceipts = localStorage.getItem('autoPrintReceipts');
+      if (savedAutoPrintReceipts) setAutoPrintReceipts(savedAutoPrintReceipts === 'true');
+      
+      const savedPrinterPaperWidth = localStorage.getItem('printerPaperWidth');
+      if (savedPrinterPaperWidth) setPrinterPaperWidth(savedPrinterPaperWidth);
+      
+      const savedPrintDensity = localStorage.getItem('printDensity');
+      if (savedPrintDensity) setPrintDensity(savedPrintDensity);
     };
     
     loadSettings();
-  }, [setLanguage]);
+  }, []);
+  
+  const handleConnectPrinter = async () => {
+    try {
+      setIsConnecting(true);
+      
+      // Dynamically import the BluetoothPrinter to avoid issues in environments where it's not supported
+      const { BluetoothPrinter } = await import('@/utils/bluetoothPrinter');
+      
+      const success = await BluetoothPrinter.connect();
+      if (success) {
+        setIsPrinterConnected(true);
+        setPrinterStatus(BluetoothPrinter.getDeviceName());
+        toast({
+          title: t("printerConnected"),
+          description: t("printerConnectedDescription"),
+        });
+      } else {
+        toast({
+          title: t("connectionFailed"),
+          description: t("connectionFailedDescription"),
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error connecting to printer:', error);
+      toast({
+        title: t("connectionError"),
+        description: error instanceof Error ? error.message : t("unknownError"),
+        variant: "destructive",
+      });
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const handleDisconnectPrinter = async () => {
+    try {
+      // Dynamically import the BluetoothPrinter
+      const { BluetoothPrinter } = await import('@/utils/bluetoothPrinter');
+      
+      await BluetoothPrinter.disconnect();
+      setIsPrinterConnected(false);
+      setPrinterStatus(null);
+      toast({
+        title: t("printerDisconnected"),
+        description: t("printerDisconnectedDescription"),
+      });
+    } catch (error) {
+      console.error('Error disconnecting from printer:', error);
+      toast({
+        title: t("disconnectionError"),
+        description: error instanceof Error ? error.message : t("unknownError"),
+        variant: "destructive",
+      });
+    }
+  };
   
   const handleSave = () => {
     // Save general settings
@@ -259,35 +338,6 @@ export const Settings = ({ username, onBack, onLogout }: SettingsProps) => {
     localStorage.setItem('purchaseFontSize', purchaseFontSize);
     localStorage.setItem('purchasePaperWidth', purchasePaperWidth);
     
-    // Save template config for printing utilities
-    saveTemplateConfig({
-      customTemplate,
-      templateHeader,
-      templateFooter,
-      showBusinessInfo,
-      showTransactionDetails,
-      showItemDetails,
-      showTotals,
-      showPaymentInfo,
-      fontSize,
-      paperWidth
-    });
-    
-    // Save purchase template config for printing utilities
-    savePurchaseTemplateConfig({
-      customTemplate: customPurchaseTemplate,
-      templateHeader: purchaseTemplateHeader,
-      templateFooter: purchaseTemplateFooter,
-      showBusinessInfo: showPurchaseBusinessInfo,
-      showTransactionDetails: showPurchaseTransactionDetails,
-      showItemDetails: showPurchaseItemDetails,
-      showTotals: showPurchaseTotals,
-      showPaymentInfo: showPurchasePaymentInfo,
-      showSupplierInfo: showPurchaseSupplierInfo,
-      fontSize: purchaseFontSize,
-      paperWidth: purchasePaperWidth
-    });
-    
     // Save notification settings
     localStorage.setItem('emailNotifications', emailNotifications.toString());
     localStorage.setItem('lowStockAlerts', lowStockAlerts.toString());
@@ -300,8 +350,13 @@ export const Settings = ({ username, onBack, onLogout }: SettingsProps) => {
     
     // Save display settings
     localStorage.setItem('darkMode', darkMode.toString());
-    localStorage.setItem('language', language);
     localStorage.setItem('displayFontSize', displayFontSize);
+    
+    // Save printer settings
+    localStorage.setItem('enableBluetoothPrinting', enableBluetoothPrinting.toString());
+    localStorage.setItem('autoPrintReceipts', autoPrintReceipts.toString());
+    localStorage.setItem('printerPaperWidth', printerPaperWidth);
+    localStorage.setItem('printDensity', printDensity);
     
     toast({
       title: t("settingsSaved"),
@@ -372,6 +427,7 @@ export const Settings = ({ username, onBack, onLogout }: SettingsProps) => {
     { id: "general", label: t("general"), icon: Building },
     { id: "receipt", label: t("receipt"), icon: Printer },
     { id: "purchaseReceipt", label: t("purchaseReceipt"), icon: Printer },
+    { id: "printer", label: t("printer"), icon: Printer },
     { id: "notifications", label: t("notifications"), icon: Bell },
     { id: "security", label: t("security"), icon: Shield },
     { id: "display", label: t("display"), icon: Palette },
@@ -838,6 +894,121 @@ export const Settings = ({ username, onBack, onLogout }: SettingsProps) => {
                           </div>
                         </div>
                       )}
+                    </div>
+                  </div>
+                )}
+                
+                {activeTab === "printer" && (
+                  <div className="space-y-6">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <h3 className="font-medium text-blue-800 mb-2">{t("bluetoothPrinterSetup")}</h3>
+                      <p className="text-sm text-blue-600 mb-4">
+                        {t("bluetoothPrinterSetupDescription")}
+                      </p>
+                      
+                      <div className="flex flex-col sm:flex-row gap-4">
+                        <Button 
+                          onClick={handleConnectPrinter}
+                          disabled={!isBluetoothSupported || isConnecting}
+                          className="flex-1"
+                        >
+                          {isConnecting ? (
+                            <>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                              {t("connecting")}
+                            </>
+                          ) : (
+                            <>
+                              <Printer className="h-4 w-4 mr-2" />
+                              {t("connectPrinter")}
+                            </>
+                          )}
+                        </Button>
+                        
+                        <Button 
+                          variant="outline" 
+                          onClick={handleDisconnectPrinter}
+                          disabled={!isPrinterConnected}
+                          className="flex-1"
+                        >
+                          <Printer className="h-4 w-4 mr-2" />
+                          {t("disconnectPrinter")}
+                        </Button>
+                      </div>
+                      
+                      {printerStatus && (
+                        <div className="mt-4 p-3 bg-white rounded-md border">
+                          <div className="flex items-center">
+                            <div className={`w-3 h-3 rounded-full mr-2 ${isPrinterConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                            <span className="text-sm font-medium">
+                              {isPrinterConnected 
+                                ? `${t("connectedTo")} ${printerStatus}` 
+                                : t("notConnected")}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="border-t pt-6">
+                      <h3 className="text-lg font-medium mb-4">{t("printerSettings")}</h3>
+                      
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Label>{t("enableBluetoothPrinting")}</Label>
+                            <p className="text-sm text-muted-foreground">
+                              {t("enableBluetoothPrintingDescription")}
+                            </p>
+                          </div>
+                          <Switch
+                            checked={enableBluetoothPrinting}
+                            onCheckedChange={setEnableBluetoothPrinting}
+                          />
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Label>{t("autoPrintReceipts")}</Label>
+                            <p className="text-sm text-muted-foreground">
+                              {t("autoPrintReceiptsDescription")}
+                            </p>
+                          </div>
+                          <Switch
+                            checked={autoPrintReceipts}
+                            onCheckedChange={setAutoPrintReceipts}
+                          />
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <Label htmlFor="paper-width">{t("paperWidth")}</Label>
+                            <Select value={printerPaperWidth} onValueChange={setPrinterPaperWidth}>
+                              <SelectTrigger id="paper-width">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="58mm">58mm ({t("narrow")})</SelectItem>
+                                <SelectItem value="80mm">80mm ({t("standard")})</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label htmlFor="print-density">{t("printDensity")}</Label>
+                            <Select value={printDensity} onValueChange={setPrintDensity}>
+                              <SelectTrigger id="print-density">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="light">{t("light")}</SelectItem>
+                                <SelectItem value="medium">{t("medium")}</SelectItem>
+                                <SelectItem value="dark">{t("dark")}</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
